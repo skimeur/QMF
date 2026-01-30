@@ -167,6 +167,7 @@ if ploton:
     )
     ax.set_ylabel("Growth rate")
 
+
 # =============================================================================
 # Demean population growth rate
 # =============================================================================
@@ -180,23 +181,51 @@ if ploton:
     )
     ax.set_ylabel("Growth rate")
 
+# =============================================================================
+
+# Remove deterministic month-of-year seasonality (monthly means)
+# =============================================================================
+
+dx["season_mean"] = np.nan
+for m in range(1, 13):
+    dx.loc[dx["Month"] == m, "season_mean"] = dx.loc[dx["Month"] == m, "Population_demeaned"].mean()
+
+if ploton:
+    ax = dx["season_mean"].plot(
+        title="Estimated Seasonality (Month-of-Year Mean)",
+        legend=False,
+        figsize=(8, 4),
+    )
+    ax.set_ylabel("Seasonal mean")
+
+
+dx["Population_deseasonalized"] = dx["Population_demeaned"] - dx["season_mean"]
+
+if ploton:
+    ax = dx["Population_deseasonalized"].plot(
+        title="Demeaned and Deseasonalized Population Growth",
+        legend=False,
+        figsize=(8, 4),
+    )
+    ax.set_ylabel("Growth rate")
+
 
 # =============================================================================
 # Final stationary series used for AR modeling
 # =============================================================================
-ytild = dx["Population_demeaned"].dropna()
+ytild = dx["Population_deseasonalized"].dropna()
 
 # Optional visualization
 if ploton:
     ax = ytild.plot(
-        title="Demeaned Population Growth Rate",
+        title="Demeaned, Deseasonalized Population Growth Rate",
         legend=False,
         figsize=(8, 4),
     )
     ax.set_ylabel("Growth rate")
 
 # ADF test on demeaned growth rate
-adf_report(ytild, label="Demeaned population growth rate")
+adf_report(ytild, label="Demeaned, Deseasonalized population growth rate")
 
 
 
@@ -268,37 +297,6 @@ if ploton:
     ax.fill_between(fc_ci.index, fc_ci.iloc[:, 0], fc_ci.iloc[:, 1], alpha=0.2)
     ax.set_ylabel("Growth rate")
     ax.legend(["Observed", "Fitted", "Forecast", "95% CI"])
-
-
-
-# 2) Remove deterministic month-of-year seasonality (monthly means)
-dx["season_mean"] = np.nan
-for m in range(1, 13):
-    dx.loc[dx["Month"] == m, "season_mean"] = dx.loc[dx["Month"] == m, "Population_demeaned"].mean()
-
-if ploton:
-    ax = dx["season_mean"].plot(
-        title="Estimated Seasonality (Month-of-Year Mean)",
-        legend=False,
-        figsize=(8, 4),
-    )
-    ax.set_ylabel("Seasonal mean")
-
-
-dx["Population_deseasonalized"] = dx["Population_demeaned"] - dx["season_mean"]
-
-if ploton:
-    ax = dx["Population_deseasonalized"].plot(
-        title="Demeaned and Deseasonalized Population Growth",
-        legend=False,
-        figsize=(8, 4),
-    )
-    ax.set_ylabel("Growth rate")
-
-# 3) Fit AR(1) on deseasonalized growth rate
-ytild_ds = dx["Population_deseasonalized"].dropna()
-ar1_ds = ARIMA(ytild_ds, order=(1, 0, 0), trend="n").fit()
-print(ar1_ds.summary())
 
 
 # =============================================================================
