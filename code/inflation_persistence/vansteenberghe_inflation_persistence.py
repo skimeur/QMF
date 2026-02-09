@@ -52,7 +52,6 @@ Repository: https://github.com/skimeur/QMF
 License: MIT (code). See LICENSE at repository root.
 """
 
-
 import pandas as pd
 import os
 import numpy as np
@@ -77,7 +76,6 @@ os.chdir('//Users/skimeur/Mon Drive/QMF/')
 #%% Inflation persistence analysis starts here
 # Reading the CSV file that contains inflation data
 df = pd.read_csv('data/inflation_data.csv')
-
 
 # -----------------------------------------------------------------------------
 # Filter inflation data for the European Union (EU)
@@ -340,6 +338,15 @@ y_T_plus_1 = ar6_model.predict(start=len(df), end=len(df)).iloc[0]
 forecast_interval_low  = y_T_plus_1 - 1.96 * se_h
 forecast_interval_high = y_T_plus_1 + 1.96 * se_h
 
+# -----------------------------------------------------------------------------
+# Print block 
+# -----------------------------------------------------------------------------
+level = 95  # since we used 1.96
+print(f"1-step ahead point forecast (t+1): {y_T_plus_1:.4f}")
+print(
+    f"1-step ahead {level}% PI: "
+    f"[{forecast_interval_low:.4f}, {forecast_interval_high:.4f}]  (SE={se_h:.4f})"
+)
 
 # -----------------------------------------------------------------------------
 # Stock & Watson (2007) AR(AIC) benchmark — adapted to monthly EU inflation
