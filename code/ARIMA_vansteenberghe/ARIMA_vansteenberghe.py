@@ -1,13 +1,51 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-2024
+QMF — Time Series & Financial Returns (Unit Roots, Random Walks, AR/ARIMA)
 
-@author: Eric Vansteenberghe
-Quantitative Methods in Finance
-Models and Forecast reminder: ARIMA, Garch, VAR
-# https://arch.readthedocs.io/en/latest/univariate/introduction.html
+This script is a self-contained teaching/replication file used in the Quantitative Methods
+in Finance (QMF) materials. It illustrates core concepts in empirical time-series analysis
+through daily financial returns, with an emphasis on reproducible workflows and transparent
+econometric diagnostics.
+
+Main components
+---------------
+1) Data acquisition:
+   - Optionally downloads the S&P 500 level series (ticker: SP500) from FRED via
+     `pandas_datareader` (internet=True).
+   - Alternatively loads a local CSV (placeholder: CAC 40 file path) when internet=False.
+
+2) Returns and stylized facts:
+   - Computes simple daily returns from the index level.
+   - Produces optional plots (index, returns, histograms).
+
+3) Stationarity and unit-root testing (ADF):
+   - Simulates (i) white noise, (ii) trend-stationary, and (iii) quadratic-trend processes.
+   - Runs ADF tests under different deterministic specifications (c, ct, ctt).
+   - Shows how to recover the auxiliary regression output (store=True, regresults=True),
+     and reproduces the ADF regression manually via OLS for pedagogical purposes.
+
+4) Forecasting benchmarks:
+   - Builds a random-walk forecast for returns and compares forecast errors (ME, MAE, RMSE)
+     against a simple “mean so far” benchmark.
+
+5) Simple AR/ARIMA modeling:
+   - Uses Ljung–Box tests to assess residual serial correlation.
+   - Fits AR(1) models using `statsmodels` ARIMA (order=(1,0,0)).
+   - Demonstrates the difference between modeling returns directly and fitting ARIMA(p,1,q)
+     on the level series.
+   - Provides a simple numerical RMSE minimization for an AR(1) predictor (via `scipy.fmin`).
+
+6) Identification tools:
+   - Plots ACF/PACF and shows how to extract ACF confidence intervals.
+
+License
+-------
+MIT
+
+Author
+------
+Eric Vansteenberghe
 """
+
 
 import numpy as np
 import pandas as pd
@@ -23,31 +61,60 @@ import statsmodels.api as sm
 from arch.univariate import ARX
 from arch.univariate import GARCH
 from arch import arch_model
+from pandas_datareader import data as pdr
 
 # We set the working directory (useful to chose the folder where to export output files)
 os.chdir('/Users/skimeur/Mon Drive/QMF')
 
 # if you want to plot, set ploton to 1
 ploton = False
+internet = True
+
+def download_sp500(start="1950-01-01", end=None):
+    """
+    Download S&P 500 index (SP500) from FRED.
+    
+    Parameters
+    ----------
+    start : str
+        Start date in 'YYYY-MM-DD' format.
+    end : str or None
+        End date in 'YYYY-MM-DD' format. If None, uses today's date.
+    
+    Returns
+    -------
+    pd.Series
+        Time series of the S&P 500 index.
+    """
+    df = pdr.DataReader("SP500", "fred", start=start, end=end)
+    sp500 = df["SP500"].dropna()
+    sp500.name = "SP500"
+    return sp500
+
 
 #%% Import CAC 40 index data
-df = pd.read_csv('data/cac40.csv', index_col=0, header=None)
-df.columns = ['CAC']
-# index as dates
-df.index = pd.to_datetime(df.index)
+if internet:
+    df = download_sp500(start="2000-01-01")
+    df = df.to_frame()
+    df.columns = ['index']
+else:
+    df = pd.read_csv('data/cac40.csv', index_col=0, header=None)
+    df.columns = ['index']
+    # index as dates
+    df.index = pd.to_datetime(df.index)
 
 # we compute the daily returns
-df['r'] = df['CAC'] / df['CAC'].shift(1) - 1
+df['r'] = df['index'] / df['index'].shift(1) - 1
 
 # remove NaN
 df = df.dropna()
 
 if ploton:
-    ax = df['CAC'].plot( title='CAC 40 index')
+    ax = df['index'].plot( title='Index')
     fig = ax.get_figure()
     fig.savefig('fig/cac40.pdf')
     plt.close()
-    ax = df['r'].plot( title='CAC 40 return')
+    ax = df['r'].plot( title='Return')
     fig = ax.get_figure()
     fig.savefig('fig/rcac40.pdf')
     plt.close()
@@ -194,7 +261,7 @@ AR1model.summary()
 
 # we try the equivalent ARIMA(1,1,0) on the original time series
 # but is it equivalent (all at once versus sequential)?
-AR1model_allatonce = ARIMA(df.CAC, order=(1,1,0)).fit()
+AR1model_allatonce = ARIMA(df['index'], order=(1,1,0)).fit()
 AR1model_allatonce.summary() 
 
 # My advice: if you have the raw time series, fit an ARIMA (or a SARIMA) directly
@@ -272,128 +339,3 @@ if ploton:
 acf, confidence_interval = sm.tsa.acf(df.r,nlags=df.r.shape[0]-1,alpha=0.05,fft=False)
 confidence_interval
 
-#%% ARIMA model to the returns
-
-# inspired by the webpage: https://machinelearningmastery.com/arima-for-time-series-forecasting-with-python/
-
-# fit model to the returns
-model = ARIMA(df.r, order=(1,0,1)).fit()
-# for a model without the constant: 
-#model_fit = model.fit(disp=0,trend = 'nc')
-print(model.summary())
-
-# based on the ACF and PACF, it was tempting to fit an ARMA(2,2)
-# what do you obtain when you fit this?
-model22 = ARIMA(df.r, order=(2,0,2)).fit()
-# for a model without the constant: 
-#model_fit = model.fit(disp=0,trend = 'nc')
-print(model22.summary())
-
-# to know the output of the model
-dir(model)
-
-model33 = ARIMA(df.r, order=(3,0,3)).fit()
-
-# plot the model residuals
-if ploton:
-    ax = model33.resid.plot()
-    fig = ax.get_figure()
-    fig.savefig('fig/ARMA_residuals.pdf')
-
-# we can test the residuals of the model with a Breusch-Godfrey test
-diagnostic.acorr_breusch_godfrey(model33,nlags=20)
-# H0: there is no serial correlation of any order up to nlags
-
-# manually compute the ARMA
-model.params
-
-cstt = model.params[0]
-phi = model.params[1]
-theta = model.params[2]
-df['rARMA'] = np.nan
-df.rARMA.iloc[0] = 0
-for i in range(1,len(df)):
-    df.rARMA.iloc[i] = cstt + phi * df.rARMA.iloc[i-1] + theta * (df.rARMA.iloc[i-1] - df.r.iloc[i-1])
-
-# unit root test
-adfuller(df.rARMA,regression='c') 
-
-if np.sqrt(((df['rARMA'] - df.r)**2).mean()) > np.sqrt(((meansofar.r.fillna(0) - df.r)**2).mean()):
-    print('our ARMA model do not do better than just taking the mean observed so far')
-else:
-    if np.sqrt(((df['rARMA'] - df.r)**2).mean()) > np.sqrt(((df['rAR'] - df.r)**2).mean()):
-        print('our ARMA(1,1) is better than our AR(1)')
-    else: 
-        print('our AR(1) model beats our ARMA(1,1)')
-
-# plot residual errors
-residuals = pd.DataFrame(model.resid)
-diagnostic.het_arch(residuals) # H0: no ARCH
-diagnostic.het_arch(model33.resid) # H0: no ARCH
-if ploton:
-    residuals.plot(legend=False)
-    residuals.hist(bins=50)
-    residuals.plot(kind='kde')
-    print(residuals.describe())
-# our result seems rather unbiased
-
-del c, cstt, i, meansofar, phi, residuals, t, theta, xopt, AR1model
-
-#%% AR(1)-ARCH(1) model of the returns
-# ARCH doc: https://arch.readthedocs.io/en/latest/univariate/univariate.html
-# model checks not a strong poin here (cf R)
-
-# apply an ARCH(1) on the ARMA(1,1) residuals
-# Nota Bene: this is for illustration only!
-# You should fit the ARIMA-GARCH model all at once
-arch1 = arch_model(model33.resid, p=1, q=0)
-res = arch1.fit()
-print(res.summary())
-if ploton:
-    res.plot()
-    res.conditional_volatility.plot()
-    dir(res)
-    res.resid.plot()
-    df.r.plot()
-    # both look the same, we want to plot epsilon, not sigma_t epsilon_t which is bound to be followint R_t
-    res.std_resid.plot()
-    # or equivalently
-    (res.resid / res.conditional_volatility).plot()
-
-diagnostic.het_arch(res.std_resid) # H0: no ARCH
-
-# AR(1)-GARCH(1,1)
-garch11 = arch_model(df.r, p=1, q=1)
-garch11.mean = ARX(df.r, lags=[1])
-resgarch = garch11.fit()
-print(resgarch.summary())
-if ploton:
-    resgarch.plot()
-    resgarch.conditional_volatility.plot()
-    dir(resgarch)
-    resgarch.resid.plot()
-    df.r.plot()
-    # both look the same, we plot the standardized residuals
-    resgarch.std_resid.plot()
-
-
-#%% AR(1)-EGARCH(1)
-
-egarch = arch_model(df.r, vol='EGARCH', p=1, o=0, q=1)
-egarch.mean = ARX(df.r, lags=[1])
-resegarch = egarch.fit()
-print(resegarch.summary())
-if ploton:
-    resegarch.plot()
-    resegarch.conditional_volatility.plot()
-    dir(resgarch)
-    resegarch.resid.plot()
-    df.r.plot()
-    # both look the same, we plot the standardized residuals
-    resegarch.std_resid.plot()
-
-diagnostic.het_arch(resegarch.std_resid) # H0: no ARCH
-
-# Exercise:
-# ARMA(p,q)-EGARCH(r)
-# use information criterion to select the orders p, j and q of the EGARCH
