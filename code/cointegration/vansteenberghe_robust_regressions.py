@@ -52,6 +52,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
+from statsmodels.tsa.seasonal import seasonal_decompose
 import statsmodels.formula.api as smf
 from stargazer.stargazer import Stargazer
 from sklearn.linear_model import LinearRegression
@@ -64,39 +65,55 @@ ploton = True
 os.chdir('//Users/skimeur/Mon Drive/QMF/')
 
 #%% Import the data on French population again as in part 1
-df = pd.read_csv('data/Valeurs.csv', sep=';', encoding='latin1', skiprows=[0,1,2], header=None, index_col=False)
-df = df.iloc[::-1]
-df.columns = ['Year','Month','Population']
-df.index = pd.to_datetime((df.Year*100+df.Month).apply(str),format='%Y%m')
-for coli in ['Year','Month']:
-    del df[coli]
-df = df.replace({' ': ''}, regex=True) 
-df = df.astype(float)
-df = df/1000
+# Load the CSV file 'Valeurs.csv' with a semicolon separator, Latin-1 encoding, skip the first three rows, and set no header or index column
+pop = pd.read_csv('data/Valeurs.csv', sep=';', encoding='latin1', skiprows=[0,1,2], header=None, index_col=False)
 
-#%% GDP data
+# Reverse the DataFrame rows to make the data appear in chronological order, it was initially reversed
+pop = pop.iloc[::-1]
+
+# Rename columns to 'Year', 'Month', and 'Population' for clarity
+pop.columns = ['Year', 'Month', 'Population']
+
+# Set the index to a monthly date range starting from January 1994 to October 2016
+pop.index = pd.date_range('1994-01', '2016-10', freq='M')
+
+# Drop the 'Year' and 'Month' columns as they are no longer needed after setting the date index
+pop = pop.drop(columns=['Year', 'Month'])
+
+# Replace any spaces in the 'Population' column with an empty string to clean the data
+pop = pop.replace({' ': ''}, regex=True)
+
+# Convert the 'Population' column values to floats for numerical operations
+pop = pop.astype(float)
+
+# Scale the 'Population' values down by dividing by 1000, so it is in millions
+pop = pop / 1000
+
+decomposition = seasonal_decompose(pop["Population"], 
+                                    model="additive", 
+                                    period=12)
+
+# Deseasonalized population
+pop["Population"] = pop["Population"] - decomposition.seasonal
+
+#%% Wage sum, CVS = “Corrigée des Variations Saisonnières” → Seasonally adjusted.
+# here, we call gdp in fact what is "Wage Sum in Branches"
 gdp = pd.read_csv('data/GDP.csv',sep=';',encoding='latin1',skiprows = [0,1])
 gdp = gdp.iloc[::-1]
-gdp.columns = ['quarter','GDP']
-gdp['year'] = gdp.index
-gdp['date'] = gdp['year'].astype(str) + ['-Q'] + gdp['quarter'].astype(str)
-gdp['date'] = pd.to_datetime(gdp['date'])
-gdp.index = gdp.date
-#gdp.index = pd.date_range('1949-01', '2016-09', freq='Q') 
-for coli in ['quarter','year','date']:
-    del gdp[coli]
+gdp.columns = ['Quarter','GDP']
+gdp.index = pd.date_range('1949-01', '2016-09', freq='Q') 
+gdp = gdp.drop(columns=['Quarter'])
 gdp = gdp.replace({' ': ''}, regex=True) 
 gdp = gdp.astype(float)
 
-
-# concatenate both time series into one data frame
-df = pd.concat([df,gdp],axis=1)
+#%% concatenate both time series into one data frame
+df = pd.concat([pop.Population,gdp],axis=1)
 
 # drop rows with missing values
 df = df.dropna(axis=0)
 
 # compute quarterly changes
-dx = df / df.shift(1)-1
+dx = (df-df.shift(1))/df.shift(1)
 dx = dx.dropna()
 
 del gdp
@@ -175,7 +192,5 @@ del x, stepsize
 stargazer = Stargazer([olsreg, olsreg_wo_outliers])
 regout = stargazer.render_latex()
 
-stargazer2 = Stargazer([quantreg, quantreg_wo_outliers])
+stargazer2 = Stargazer([olsreg, olsreg_wo_outliers,quantreg, quantreg_wo_outliers])
 regout2 = stargazer2.render_latex()
-
-
