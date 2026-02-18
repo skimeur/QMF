@@ -1,41 +1,78 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-QMF 2026 — Cointegration, ECM, and Regression Diagnostics (French GDP & Population)
+QMF 2026 — Cointegration, Error Correction Models, and Regression Diagnostics
+(French Population & Wage Sum, CVS)
 
-This script accompanies the QMF (Quantitative Methods in Finance) lecture notes section on
-non-stationary time series. It provides an end-to-end, pedagogical workflow covering:
+This script accompanies the QMF (Quantitative Methods in Finance) lecture notes
+on non-stationary time series. It provides a complete, pedagogical workflow
+illustrating unit roots, spurious regression, cointegration, and ECM estimation.
 
-1) Data loading and basic cleaning
-   - French population (monthly; INSEE export)
-   - French GDP (quarterly; CSV prepared from INSEE or class materials)
+Important clarification
+-----------------------
+In the code, the variable named "GDP" actually corresponds to:
 
-2) Exploratory analysis before regression
-   - Time-series plots with dual y-axis
-   - Growth-rate computations
-   - Scatter plots and correlation in differences
+    “Masse salariale versée – Total branches – Valeur aux prix courants – Série CVS”
 
-3) Unit root testing
-   - Manual Dickey–Fuller regression illustration (single-lag, no intercept version)
-   - Augmented Dickey–Fuller tests via statsmodels with different deterministic components
+published by INSEE (seasonally adjusted wage bill).
 
-4) Spurious regression and cointegration
-   - Illustration of spurious regression risks with I(1) series
+This series is NOT equivalent to GDP. It measures the aggregate wage sum
+(in current prices, seasonally adjusted). It is used here for educational
+purposes only, to illustrate econometric concepts in a macroeconomic setting.
+The notation "GDP" is kept in parts of the script for simplicity and continuity
+with lecture notes.
+
+Main pedagogical components
+---------------------------
+
+1) Data loading and cleaning
+   - French population (monthly, INSEE export)
+   - Wage sum (quarterly, seasonally adjusted — CVS)
+
+2) Seasonal treatment
+   - Additive seasonal decomposition of population (period = 12)
+   - Construction of a deseasonalized population series
+   - No seasonal adjustment applied to the wage series (already CVS)
+
+3) Exploratory analysis
+   - Merging series on a common date index
+   - Dual-axis level plots
+   - Growth-rate computation
+   - Scatter plots and correlation analysis
+
+4) Unit root testing
+   - Manual Dickey–Fuller regression (Δy_t on y_{t−1})
+   - Augmented Dickey–Fuller tests with different deterministic components
+
+5) Spurious regression and cointegration
+   - Illustration of spurious regression risk with trending series
    - Engle–Granger cointegration test (statsmodels.tsa.stattools.coint)
 
-5) Synthetic example
-   - Simulation of two I(1) series that are cointegrated by construction
-   - Estimation of a cointegrating regression and an Error Correction Model (ECM)
+6) Synthetic cointegration example
+   - Simulation of two I(1) processes cointegrated by construction
+   - Estimation of the cointegrating regression
+   - Construction of an Error Correction Model (ECM)
 
-6) Empirical example (interest rates)
-   - ECB Statistical Data Warehouse Euribor 1Y vs 3M
-   - Cointegration check and simple ECM specification
+7) Empirical cointegration example
+   - Euribor 1Y and 3M (ECB Statistical Data Warehouse)
+   - Cointegration testing and ECM specification
 
-7) Robustness and diagnostics in regression on stationary transformations
+8) Cross-country illustration (Penn World Table)
+   - Unit-root testing for macro aggregates
+   - Illustration of I(2) behavior and limits of ECM modeling
+
+9) Regression on stationary transformations
    - OLS on growth rates
-   - Outlier detection via dummy regressors + Bonferroni-style threshold
-   - Q–Q plots of (Pearson) normalized residuals
+   - Outlier detection via dummy variables
+   - Bonferroni-adjusted critical values
+   - Q–Q plots of normalized residuals
 
+Learning objectives
+-------------------
+- Understand why regressions in levels of I(1) variables can be spurious.
+- Distinguish between short-run correlations and long-run equilibrium relations.
+- Interpret the error-correction term as a “force of recall”.
+- Practice rigorous diagnostic analysis in time-series regression.
 
 Author: Eric Vansteenberghe
 Affiliation: Banque de France
@@ -43,15 +80,14 @@ License: MIT
 Year: 2026
 """
 
-
 import pandas as pd
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 import statsmodels.tsa.stattools
 import statsmodels.formula.api as smf
-from scipy.stats import ttest_ind
 import scipy.stats
+from statsmodels.tsa.seasonal import seasonal_decompose
 
 # to plot, set ploton to ploton to 1
 ploton = False
@@ -61,32 +97,48 @@ os.chdir('//Users/skimeur/Mon Drive/QMF/')
 
 #%% Import the data on French population again as in part 1
 # Load the CSV file 'Valeurs.csv' with a semicolon separator, Latin-1 encoding, skip the first three rows, and set no header or index column
-df = pd.read_csv('data/Valeurs.csv', sep=';', encoding='latin1', skiprows=[0,1,2], header=None, index_col=False)
+pop = pd.read_csv('data/Valeurs.csv', sep=';', encoding='latin1', skiprows=[0,1,2], header=None, index_col=False)
 
 # Reverse the DataFrame rows to make the data appear in chronological order, it was initially reversed
-df = df.iloc[::-1]
+pop = pop.iloc[::-1]
 
 # Rename columns to 'Year', 'Month', and 'Population' for clarity
-df.columns = ['Year', 'Month', 'Population']
+pop.columns = ['Year', 'Month', 'Population']
 
 # Set the index to a monthly date range starting from January 1994 to October 2016
-df.index = pd.date_range('1994-01', '2016-10', freq='M')
+pop.index = pd.date_range('1994-01', '2016-10', freq='M')
 
 # Drop the 'Year' and 'Month' columns as they are no longer needed after setting the date index
-df = df.drop(columns=['Year', 'Month'])
+pop = pop.drop(columns=['Year', 'Month'])
 
 # Replace any spaces in the 'Population' column with an empty string to clean the data
-df = df.replace({' ': ''}, regex=True)
+pop = pop.replace({' ': ''}, regex=True)
 
 # Convert the 'Population' column values to floats for numerical operations
-df = df.astype(float)
+pop = pop.astype(float)
 
-# Scale the 'Population' values down by dividing by 1000
-df = df / 1000
+# Scale the 'Population' values down by dividing by 1000, so it is in millions
+pop = pop / 1000
 
+decomposition = seasonal_decompose(pop["Population"], 
+                                    model="additive", 
+                                    period=12)
+if ploton:
+    decomposition.plot()
 
-#%% GDP data
+# Deseasonalized population
+pop["Population"] = pop["Population"] - decomposition.seasonal
 
+if ploton:
+    plt.figure(figsize=(8,5))
+    plt.plot(pop.index, pop["Pop_deseasonalized"])
+    plt.title("Deseasonalized Population")
+    plt.ylabel("Population (Millions)")
+    plt.xlabel("Date")
+    plt.show()
+
+#%% Wage sum, CVS = “Corrigée des Variations Saisonnières” → Seasonally adjusted.
+# here, we call gdp in fact what is "Wage Sum in Branches"
 gdp = pd.read_csv('data/GDP.csv',sep=';',encoding='latin1',skiprows = [0,1])
 gdp = gdp.iloc[::-1]
 gdp.columns = ['Quarter','GDP']
@@ -98,37 +150,35 @@ if ploton:
     gdp.plot()
 
 #%% concatenate both time series into one data frame
-both = pd.concat([df,gdp],axis=1)
+df = pd.concat([pop.Population,gdp],axis=1)
 
 # drop rows with missing values
-both = both.dropna(axis=0)
+df = df.dropna(axis=0)
 
 if ploton:
-    ax = both.plot(secondary_y=['Population'])
+    ax = df.plot(secondary_y=['Population'])
     fig = ax.get_figure()
     fig.savefig('fig/GDP_pop.pdf')
 
 # compute quarterly changes
-both_change = (both-both.shift(1))/both.shift(1)
+dx = (df-df.shift(1))/df.shift(1)
+dx = dx.dropna()
 
 if ploton:
-    ax2 = both_change.plot()
+    ax2 = dx.plot()
     fig2 = ax2.get_figure()
     fig2.savefig('fig/GDP_pop_change.pdf')
 
 #%% Before the OLS: visulization of the data set
 
 if ploton:
-    axall = both_change.plot.scatter(x='GDP', y='Population')
+    axall = dx.plot.scatter(x='GDP', y='Population')
     figall = axall.get_figure()
     figall.savefig('fig/gdppopscatterplot.pdf')
     plt.close()
 
-#%% Correlation between population and GDP growth rates
-
-both_change.corr()
-
-del both, both_change
+#%% Correlation between population and wage sum growth rates
+dx.corr()
 
 
 #%% Unit Root test - Dickey-Fuller test
@@ -149,47 +199,32 @@ scipy.stats.t.ppf(proba, degreeoffreedom)
 
 # 10.41 is above 1.65
 # low risk to wrongly reject H0 but
-# for simplicity here we decide that rho - 1 is not equal to 0
-# we decide that there is no unit root int his time series (be careful as the lenght of this series is limited)
 
 del degreeoffreedom, dickeyfullerdf, proba
 
 #%% Unit Root test - Augmented Dickey-Fuller test
 #Before we start regressing variables:
 #Test integration order:
-
-#we compute the changes
-df_change = (df-df.shift(1)) / df.shift(1)
-df_change = df_change.dropna()
-gdp_change = (gdp-gdp.shift(1)) / gdp.shift(1)
-gdp_change = gdp_change.dropna()
-
 #Population
 statsmodels.tsa.stattools.adfuller(df.Population, regression='ct')
-statsmodels.tsa.stattools.adfuller(df_change.Population, regression='c')
+statsmodels.tsa.stattools.adfuller(dx.Population, regression='c')
 #GDP
-statsmodels.tsa.stattools.adfuller(gdp.GDP, regression='ct')
-statsmodels.tsa.stattools.adfuller(gdp_change.GDP, regression='c')
+statsmodels.tsa.stattools.adfuller(df.GDP, regression='ct')
+statsmodels.tsa.stattools.adfuller(dx.GDP, regression='c')
 
 # imposing 'nc' to regression mean that we assume a random walk
 # imposing 'c' means you assume a random walk with a drift
 # imposing 'ct' would have ment that both series could have been trend stationary, in which cas the trend t should have been added in the regression
 
-del df_change, gdp_change
 
-#%% Concatenate all variables in one data frame
-dfall = pd.concat([df,gdp],axis=1)
-dfall = dfall.dropna()
-dfallx = dfall / dfall.shift(1) - 1
-
-
-spurreg = smf.ols('GDP ~ Population', data=dfallx).fit()
+#%% Spurious regression
+spurreg = smf.ols('GDP ~ Population', data=dx).fit()
 spurreg.summary()
 
 
 #%% cointegration test
 # H0: no cointegration
-statsmodels.tsa.stattools.coint(dfall.GDP, dfall.Population)
+statsmodels.tsa.stattools.coint(df.GDP, df.Population)
 
 #%% Cointegation: building two cointegrated time series
 
@@ -224,9 +259,6 @@ statsmodels.tsa.stattools.adfuller(dfcoint['xt'].diff().dropna(), regression='n'
 # Cointegration test
 # H0: no cointegration
 statsmodels.tsa.stattools.coint(dfcoint['yt'],dfcoint['xt']) # cointegration
-
-dfcoint.mean()
-# as series mean are different than 0 we add a constant in the cointegration regression
 
 # regress one series on the other for the cointegration regression
 model_coint = smf.ols('yt ~ xt',data=dfcoint).fit()
@@ -369,11 +401,16 @@ del pwt, pwtx
 
 
 #%% OLS
-# we can do a linear regression on stationary series, the returns
-results = smf.ols('Population ~ GDP',data = dfallx).fit()
+# we can do a linear regression on stationary series, the growth rates
+# -------------------------------------------------------------------
+#     OLS in growth rates (a standard stationary regression)
+#     Interpretation: association between wage growth and population growth.
+# -------------------------------------------------------------------
+
+results = smf.ols('Population ~ GDP',data = dx).fit()
 dir(results)
 results.summary()
-results.rsquared - dfallx.loc[:,['Population','GDP']].corr().iloc[0,1]**2
+results.rsquared - dx.loc[:,['Population','GDP']].corr().iloc[0,1]**2
 
 
 del df, gdp
@@ -389,14 +426,14 @@ beta = results.params[1]
 
 # plot the data
 stepsize = 0.001
-x = np.arange(1.1*dfallx['GDP'].min(),1.1*dfallx['GDP'].max(),stepsize)
+x = np.arange(1.1*dx['GDP'].min(),1.1*dx['GDP'].max(),stepsize)
 
 if ploton:
-    plt.scatter(dfallx['GDP'],dfallx['Population'])
-    plt.xlabel('French GDP changes')
+    plt.scatter(dx['GDP'],dx['Population'])
+    plt.xlabel('French Wage sum changes')
     plt.ylabel('French Population changes')
     plt.plot(x, alpha+beta*x ,'-')
-    #plt.savefig('fig/GDP_Pop_scatter.pdf')
+    plt.savefig('fig/GDP_Pop_scatter.pdf')
 
 
 #df=df.resample('Q').mean()
@@ -405,37 +442,39 @@ if ploton:
 
 #%% Outlier detection and regression coefficients robustness
 # we detect a first outlier with the minimum value of GDP growth rate
-outlier1 = pd.DataFrame(dfallx.sort_values(by='GDP',ascending=True).iloc[0,:])
+outlier1 = pd.DataFrame(dx.sort_values(by='GDP',ascending=True).iloc[0,:])
 # second outlier with the maximum growth rate of population
-outlier2 = pd.DataFrame(dfallx.sort_values(by='Population',ascending=False).iloc[0,:])
+outlier2 = pd.DataFrame(dx.sort_values(by='Population',ascending=False).iloc[0,:])
 
 # create dummy variable for both outlier
-dfallx['dummy1'] = 0
-dfallx.loc[outlier1.columns,'dummy1'] = 1
-dfallx['dummy2'] = 0
-dfallx.loc[outlier2.columns,'dummy2'] = 1
+dx['dummy1'] = 0
+dx.loc[outlier1.columns,'dummy1'] = 1
+dx['dummy2'] = 0
+dx.loc[outlier2.columns,'dummy2'] = 1
 
 # outlier 1 test
-results_outlier1 = smf.ols('Population ~ GDP + dummy1',data = dfallx).fit()
+results_outlier1 = smf.ols('Population ~ GDP + dummy1',data = dx).fit()
 results_outlier1.summary()
 # outlier 2 test
-results_outlier2 = smf.ols('Population ~ GDP + dummy2',data = dfallx).fit()
+results_outlier2 = smf.ols('Population ~ GDP + dummy2',data = dx).fit()
 results_outlier2.summary()
 # the second outlier seems to be influential
 # use the Bonferroni adjustment for the critical threshold
-tstatBonferroni = scipy.stats.t.ppf(1-0.05/(2*len(dfallx)),len(dfallx)-2-1)
+tstatBonferroni = scipy.stats.t.ppf(1-0.05/(2*len(dx)),len(dx)-2-1)
 # we are still above the critical threshold and we reject H0, our dummy2 coefficient is statistically significantly different from 0
 
 # we take the second outlier out of the data set and regress again
-results = smf.ols('Population ~ GDP',data = dfallx).fit()
+results = smf.ols('Population ~ GDP',data = dx).fit()
 
-results_outlier2_out = smf.ols('Population ~ GDP',data = dfallx.loc[~ (dfallx.index == outlier2.columns[0]),:]).fit()
+results_outlier2_out = smf.ols('Population ~ GDP',data = dx.loc[~ (dx.index == outlier2.columns[0]),:]).fit()
+results_both_outliers_out = smf.ols('Population ~ GDP',data = dx.loc[(~ (dx.index == outlier2.columns[0]))&(~ (dx.index == outlier1.columns[0])),:]).fit()
 
 results.summary()
 results_outlier2_out.summary()
+results_both_outliers_out.summary()
 
 if ploton:
-    plt.scatter(dfallx['GDP'],dfallx['Population'])
+    plt.scatter(dx['GDP'],dx['Population'])
     plt.xlabel('French GDP changes')
     plt.ylabel('French Population changes')
     plt.plot(x, alpha+beta*x ,'-')
