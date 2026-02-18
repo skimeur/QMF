@@ -62,6 +62,7 @@ import os
 import numpy as np
 import statsmodels.tsa.stattools
 from statsmodels.tsa.api import VAR, SVAR
+from statsmodels.tsa.seasonal import seasonal_decompose
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import scipy.linalg as la # for LDL decomposition
@@ -119,8 +120,42 @@ gdpx['month'] = gdpx.index.month.astype(str)
 seasonalitycehck_gdp = smf.ols('GDP ~  month',data = gdpx).fit()
 seasonalitycehck_gdp.summary()
 
+#%% Import the data on French population again as in part 1
+# Load the CSV file 'Valeurs.csv' with a semicolon separator, Latin-1 encoding, skip the first three rows, and set no header or index column
+pop = pd.read_csv('data/Valeurs.csv', sep=';', encoding='latin1', skiprows=[0,1,2], header=None, index_col=False)
+
+# Reverse the DataFrame rows to make the data appear in chronological order, it was initially reversed
+pop = pop.iloc[::-1]
+
+# Rename columns to 'Year', 'Month', and 'Population' for clarity
+pop.columns = ['Year', 'Month', 'Population']
+
+# Set the index to a monthly date range starting from January 1994 to October 2016
+pop.index = pd.date_range('1994-01', '2016-10', freq='M')
+
+# Drop the 'Year' and 'Month' columns as they are no longer needed after setting the date index
+pop = pop.drop(columns=['Year', 'Month'])
+
+# Replace any spaces in the 'Population' column with an empty string to clean the data
+pop = pop.replace({' ': ''}, regex=True)
+
+# Convert the 'Population' column values to floats for numerical operations
+pop = pop.astype(float)
+
+# Scale the 'Population' values down by dividing by 1000, so it is in millions
+pop = pop / 1000
+
+decomposition = seasonal_decompose(pop["Population"], 
+                                    model="additive", 
+                                    period=12)
+
+# Deseasonalized population
+pop["Population"] = pop["Population"] - decomposition.seasonal
+
 #%% Concatenate all variables in one data frame
-dfall = pd.concat([u,df,gdp],axis=1)
+dfall = pd.concat([u,pop.Population,gdp],axis=1)
+#dfall = pd.concat([u,df,gdp],axis=1)
+dfall = dfall.resample('Q').mean()
 dfall = dfall.dropna()
 dfallx = (dfall - dfall.shift(1)) / dfall.shift(1)
 dfallx = dfallx.resample('Q').mean()
