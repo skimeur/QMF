@@ -40,7 +40,7 @@ Author: Eric Vansteenberghe
 
 import os
 # change to your directory if you want to be able to export figures in a precise folder
-os.chdir('//Users/skimeur/Mon Drive/Musik/piano')
+os.chdir('//Users/skimeur/Mon Drive/QMF')
 
 #%% first section, discover basic numpy functions
 import numpy
@@ -131,19 +131,26 @@ from scipy.optimize import fsolve
 # to get help on fsolve, type cmd + i in front of the line
 fsolve(my_f, 20)
 
-my_f(-2) == 0
+# cf lecture note, which root do we find just above or just below -1/2 and why?
+fsolve(my_f, -1/2-10**(-4))
+fsolve(my_f, -1/2)
 
-# define a second function
+
+#%% define a second function
 def second_f(x):
     return numpy.cos(x**2)
-    
-# find the root of this function
-sol = fsolve(second_f,10)
 
 x3 = numpy.arange(-10,10,0.1)
 y3 = second_f(x3)
 plt.plot(x3,y3)
 #plt.savefig('fig/cossquared.pdf')
+
+x3b = numpy.arange(9.7,10.3,0.01)
+y3b = second_f(x3b)
+plt.plot(x3b,y3b)
+
+# find the root of this function, closest to 10
+print(fsolve(second_f,10))
 
 
 #%% fixed-point iteration
@@ -169,22 +176,29 @@ a = 40 # the number we want the square root of
 x0 = 6 # our starting guess
 nint = 10 # the number of iteration
 print("estimate of sqrt(",a,") with",x0,"as starting guess and", nint,"iterations: ", fpi(babylonian_m, a, x0, nint))
-# check with the actual square root
-print("the actual sqrt(",a,"):",numpy.sqrt(a))
+# check with the numpy square root
+print("the numpy sqrt(",a,"):",numpy.sqrt(a))
 
-# BANACH FIXED POINT THEOREM
+#%% BANACH FIXED POINT THEOREM
 x0 = 1
 nint = 30
+
 # fixed-point iteration
 def fcos(x):
     return numpy.cos(x) - x
+
 x_fcos = fsolve(fcos,1)
+
 y = x0
 n = 1
-q = 0.85
+# contraction constant: cos maps the interval [0, 1] into itself and there
+# |f'(x)| = sin(x) is largest at x = 1, so q = sin(1) = 0.8415 (0.85 rounded up)
+q = numpy.sin(1)
 while n < nint:
     y = numpy.cos(y)
-    print("we verify the convergence",numpy.abs(y-x_fcos) < numpy.abs(x0 - numpy.cos(x0)) * (q**n) / (1-q))
+    error = float(numpy.abs(y - x_fcos)[0])
+    bound = float(numpy.abs(x0 - numpy.cos(x0)) * (q**n) / (1-q))
+    print("n =", n, " error =", round(error, 6), " Banach bound =", round(bound, 4), " bound holds:", error < bound)
     n += 1
     
 # ANOTHER FUNCTION
@@ -194,9 +208,9 @@ while n < nint:
 import numpy
 import matplotlib.pyplot as plt
 next_x = 6  # We start the search at x=6
-gamma = 0.01  # Step size multiplier
-precision = 0.00001  # Desired precision of result
-max_iters = 10000  # Maximum number of iterations
+gamma = 10**(-2)  # Step size multiplier
+precision = 10**(-5)  # Desired precision of result
+max_iters = 10**4  # Maximum number of iterations
 
 # Original function
 def f_orig(x):
