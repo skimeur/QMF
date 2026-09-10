@@ -34,7 +34,7 @@ def find_first(name, path):
 # you will need to change '/Users/skimeur/' to your computer root
 # this should be dsiplayed in the spyder top right "folder search" section
 # either change skimer to your user name if you use Mac or C:// if you use windows
-your_path = find_first('Valeurs.csv','/Users/skimeur')
+your_path = find_first('001641607.csv','/Users/skimeur')
 
 # Once you found your path, you can copy and paste it below:
 
