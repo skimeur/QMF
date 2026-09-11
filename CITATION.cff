@@ -1,0 +1,52 @@
+cff-version: 1.2.0
+message: "If you use this material for teaching or research, please cite the lecture notes below."
+title: "Quantitative Methods in Finance — companion code"
+abstract: >-
+  Executable companion to the lecture notes "Quantitative Methods in Finance" and the primer
+  "Mathematics for Finance: A Self-Contained Primer" by Eric Vansteenberghe, taught in the
+  Quantitative Methods in Finance and Financial Econometrics lectures at Université Paris 1
+  Panthéon-Sorbonne. Python and R implementations of probability, simulation, regression,
+  time-series, risk and insurance methods.
+type: software
+authors:
+  - family-names: Vansteenberghe
+    given-names: Eric
+    affiliation: "Banque de France; Université Paris 1 Panthéon-Sorbonne"
+repository-code: "https://github.com/skimeur/QMF"
+url: "https://arxiv.org/abs/2601.12896"
+license: MIT
+keywords:
+  - quantitative finance
+  - financial econometrics
+  - lecture notes
+  - Python
+  - R
+  - time series
+  - ARIMA
+  - GARCH
+  - structural VAR
+  - cointegration
+  - extreme value theory
+  - risk measures
+  - insurance
+  - monetary policy
+  - replication
+preferred-citation:
+  type: article
+  title: "Quantitative Methods in Finance"
+  authors:
+    - family-names: Vansteenberghe
+      given-names: Eric
+  year: 2026
+  journal: "arXiv preprint arXiv:2601.12896"
+  doi: "10.48550/arXiv.2601.12896"
+  url: "https://arxiv.org/abs/2601.12896"
+references:
+  - type: article
+    title: "Mathematics for Finance: A Self-Contained Primer"
+    authors:
+      - family-names: Vansteenberghe
+        given-names: Eric
+    year: 2026
+    journal: "SSRN Electronic Journal"
+    url: "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7442161"
