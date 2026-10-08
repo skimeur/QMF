@@ -90,14 +90,11 @@ import statsmodels.api as sm
 import pandas as pd
 import numpy as np
 import os
-from scipy.stats import chi2_contingency, spearmanr
 from statsmodels.stats.diagnostic import (
     het_breuschpagan,
     het_white,
     linear_reset,
 )
-from statsmodels.stats.stattools import jarque_bera
-from statsmodels.stats.outliers_influence import OLSInfluence
 
 ploton = False
 
@@ -250,6 +247,32 @@ if ploton:
     plt.show()
 
 
+#%% Quantile regression, a simple intro
+# https://www.statsmodels.org/devel/examples/notebooks/generated/quantile_regression.html
+
+modmedian = smf.quantreg("v437 ~  v438", df)
+resmedian = modmedian.fit(q=0.5)
+print(resmedian.summary())
+
+# Height grid in the original units (mm)
+grid = pd.DataFrame({"v438": np.linspace(df.v438.min(), df.v438.max(), 100)})
+
+plt.figure(figsize=(7, 5))
+plt.scatter(df.v438 / 1000, df.v437 / 10,
+            s=10, alpha=0.2, color="grey", label="Data")
+plt.plot(grid.v438 / 1000, modelOLS.predict(grid) / 10,
+         color="blue", label="OLS")
+plt.plot(grid.v438 / 1000, resmedian.predict(grid) / 10,
+         color="red", linestyle="--", label="Median regression")
+
+plt.xlabel("Height (m)")
+plt.ylabel("Weight (kg)")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# the median or mean approach are "relatively similar", so we can move on with an OLS
+
 #%% ------------------------------------------------------------
 # Diagnostics for Classical Linear Regression Assumptions (OLS)
 # ------------------------------------------------------------
@@ -297,6 +320,8 @@ model_quad = smf.ols("v437 ~ v438 + I(v438**2)", data=df).fit()
 print("\nQuadratic augmentation (illustrative):")
 print(f"  R2 linear: {modelOLS.rsquared:.4f}  |  R2 quadratic: {model_quad.rsquared:.4f}")
 print(f"  p-value on I(v438**2): {model_quad.pvalues.get('I(v438 ** 2)', np.nan):.4g}")
+
+print(model_quad.summary())
 
 #%% ------------------------------------------------------------
 # (A2) Random sampling: cannot be tested
@@ -592,6 +617,11 @@ if ploton:
 modellogOLS = smf.ols('logv437 ~  v438',data = df).fit()
 modellogLaTeX = modellogOLS.summary().as_latex()
 print(modellogOLS.summary())
+
+# adding the quadratic term
+modellog_quad = smf.ols("logv437 ~ v438 + I(v438**2)", data=df).fit()
+
+print(modellog_quad.summary())
 
 #%% ------------------------------------------------------------
 # (A5) Homoskedasticity: Breusch–Pagan and White tests
