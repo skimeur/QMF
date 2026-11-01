@@ -119,7 +119,13 @@ Box.test(residuals(rec.seas), lag=16, fitdf=4, type="Ljung")
 
 
 # ARMA(3,1)
-arma31 <- arima(x = rec, order = c(3, 0, 1))
+#arma31 <- arima(x = rec, order = c(3, 0, 1), seasonal = list(order = c(3, 0, 0), period = 12))
+arma31 <- arima(
+  rec,
+  order = c(3, 0, 1),
+  seasonal = list(order = c(3, 0, 1), period = 12),
+  method = "ML"
+)
 fore31 <- predict(arma31, n.ahead = 48)
 
 tsdisplay(residuals(arma31))
@@ -131,14 +137,6 @@ Box.test(residuals(arma31), lag=16, fitdf=4, type="Ljung")
 regr <- ar.ols(rec, order = 2, demean = FALSE, intercept = TRUE)
 fore2 <- predict(regr, n.ahead = 48)
 
-# Plotting results
-pdf("fig/recruitment_SOI.pdf", width = 7, height = 10)  # Increase height from 5 to 10
-par(mfrow = c(3, 1))
-plot_predictions(rec, fore$pred, fore$se, "AR(2) with seasonality")
-plot_predictions(rec, fore2$pred, fore2$se, "AR(2)")
-plot_predictions(rec, fore31$pred, fore31$se, "ARMA(3,1)")
-dev.off()
-
 # Automated parameter tuning
 auto.arima(rec)
 
@@ -149,12 +147,19 @@ s <- 12
 rec.mod <- arima(x = rec, order = c(p, d, q), seasonal = list(order = c(P, D, Q), period = s))
 
 print(rec.mod$loglik)
+fore110 <- predict(rec.mod, n.ahead = 48)
+
 
 # ============================================================
-# 1) Forecast for rec.mod (same style as others)
+# 3) Plotting results (now 4 panels)
 # ============================================================
-fore_mod <- predict(rec.mod, n.ahead = 48)
-
+pdf("fig/recruitment_SOI.pdf", width = 7, height = 12)  # taller for 4 panels
+par(mfrow = c(4, 1), mar = c(3.5, 4, 3, 1))
+plot_predictions(rec, fore2$pred,    fore2$se,    "AR(2)")
+plot_predictions(rec, fore$pred,     fore$se,     "AR(2)[12]")
+plot_predictions(rec, fore31$pred,   fore31$se,   "ARMA(3,1)[12]")
+plot_predictions(rec, fore110$pred, fore110$se, "SARIMA(1,1,0)x(0,0,2)[12] (rec.mod)")
+dev.off()
 # ============================================================
 # 2) In-sample RMSE comparison (4 models)
 #    RMSE computed from in-sample residuals (one-step-ahead errors)
@@ -163,7 +168,7 @@ rmse <- function(e) sqrt(mean(e^2, na.rm = TRUE))
 
 rmse_tbl <- data.frame(
   Model = c("AR(2) + seasonal AR(2) [12]",
-            "ARMA(3,1)",
+            "ARMA(3,1)[12]",
             "SARIMA(1,1,0)x(0,0,2)[12] (rec.mod)"),
   RMSE = c(
     rmse(residuals(rec.seas)),
@@ -175,22 +180,6 @@ rmse_tbl <- data.frame(
 # Pretty print in console
 rmse_tbl <- rmse_tbl[order(rmse_tbl$RMSE), ]
 print(rmse_tbl, row.names = FALSE)
-
-
-# ============================================================
-# 3) Plotting results (now 4 panels)
-# ============================================================
-pdf("fig/recruitment_SOI.pdf", width = 7, height = 12)  # taller for 4 panels
-par(mfrow = c(4, 1), mar = c(3.5, 4, 3, 1))
-
-plot_predictions(rec, fore$pred,     fore$se,     "AR(2) with seasonality")
-plot_predictions(rec, fore2$pred,    fore2$se,    "AR(2)")
-plot_predictions(rec, fore31$pred,   fore31$se,   "ARMA(3,1)")
-plot_predictions(rec, fore_mod$pred, fore_mod$se, "SARIMA(1,1,0)x(0,0,2)[12] (rec.mod)")
-
-dev.off()
-
-
 
 ########################################
 # Varves - fractionally intergrated ARMA
@@ -224,7 +213,6 @@ hist(log(varve),breaks=50)
 # exercise: propose a test
 
 acf(varve)
-
 pdf("fig/acf_logvarve.pdf",width=7,height=5)
 acf(log(varve))
 dev.off()
@@ -255,6 +243,8 @@ dev.off()
 # plot the autocorrelation of the residual of the model
 
 # we fit an ARMA(1,1)
+acf(diff(log(varve)))
+pacf(diff(log(varve)))
 v.arma11 <- arima(x=diff(log(varve)),order=c(1,0,1))
 summary(v.arma11)
 # comment on the results
