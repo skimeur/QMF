@@ -76,8 +76,6 @@ library(tseries) # for adf.test
 # data downloadable from here: http://regisbourbonnais.dauphine.fr/fr/publications/analyse-des-series-temporelles.html
 # Read the data from the specified sheet
 df <- read_excel("data/c1ex4.xls", sheet = 1)
-# Set the first column as row names
-row.names(df) <- df[[1]]
 # Remove the first column from the data
 df <- df[-1]
 adf_test_result <- adf.test(df[[1]])
@@ -166,7 +164,7 @@ Fc > qf(0.95, df1 = (ncol(df)-1), df2 = (nrow(df)-1)*(ncol(df)-1))
 
 Fy <- Va/Vr
 Fy > qf(0.95, df1 = (nrow(df)-1), df2 = (nrow(df)-1)*(ncol(df)-1))
-# we can reject H0 and there seems to be a trend in our series
+# we can reject H0 and there seems to be a year effect in our series
 
 # second seasonality test
 month <- season(dfts)
@@ -223,7 +221,7 @@ Fc > qf(0.95, df1 = (ncol(df)-1), df2 = (nrow(df)-1)*(ncol(df)-1))
 
 Fy <- Va/Vr
 Fy> qf(0.95, df1 = (nrow(df)-1), df2 = (nrow(df)-1)*(ncol(df)-1))
-# we can reject H0 and there seems to be a trend in our series
+# we can reject H0 and there seems to be a year effect in our series
 
 # we check that there is a trend
 year.end <- endpoints(dfts, on = "years")
@@ -241,18 +239,27 @@ plot(log(dfts))
 # STEP 1: check increasing variablity
 lambda <- BoxCox.lambda(dfts, method=c("guerrero"), lower=-5, upper=5)
 df.bc <- (as.data.frame(dfts)**lambda-1)/lambda
+df.bc <- as.vector(t(df.bc))
 df.bc <- ts(df.bc,start = c(1900,1),freq = 12)
+
 plot(df.bc)
+
+# seasonality test
+monthbc <- season(df.bc)
+modelbc <- lm (df.bc ~ monthbc)
+summary(modelbc)
 
 # STEP 2: trend and seasonality (first diff takes care of trend anyway)
 dfD <- diff(df.bc, lag=12)
+dfD <- as.data.frame(dfD)
+dfD <- as.vector(t(dfD))
+dfD <- ts(dfD,start = c(1901,1),freq = 12)
 plot(dfD)
 
 adf.test(dfD)
 
 # we try to fit an ARMA process
-layout(matrix(c(1,1,2,3), 2, 2, byrow = TRUE))
-plot(armasubsets(y=dfts,nar=7,nma=7))
+plot(armasubsets(y=dfD,nar=7,nma=7))
 # autocorrelation function: which lags of the MA components are of interest
 acf(dfts)
 acf(dfD)
@@ -260,11 +267,10 @@ acf(dfD)
 pacf(dfts)
 pacf(dfD)
 
-# we chose an ARMA(4,1) model
+# we chose an ARMA(3,0) model
 shorten <- 1.04
-plot(dfts[(length(dfts)/shorten):length(dfts)])
-m1.df <- arima(x=dfts[(length(dfts)/shorten):length(dfts)],order = c(4,0,1))
-m1.df <- Arima(dfts,order = c(4,0,1))
+plot(dfD[(length(dfD)/shorten):length(dfD)])
+m1.df <- Arima(dfD,order = c(3,0,0))
 
 #runs(m1.df$residuals)
 Box.test(m1.df$residuals, lag = 1, type = "Ljung-Box", fitdf = 0)
@@ -275,7 +281,7 @@ qqline(rstandard(m1.df))
 
 shapiro.test(residuals(m1.df))
 # H0: normality of residuals
-# in this case, we reject the null hypothesis and unfortunately the residuals are not normal
+# in this case, we reject the null hypothesis and the residuals are not normal
 
 # we predict the rainfall over the next 5 years
 futurVal <- forecast(m1.df, h=60, level=c(99.5))
@@ -288,23 +294,25 @@ plot(df.dec.mult)
 df.dec <- decompose(dfts, type='additive')
 plot(df.dec)
 # other approach
-fit = stl(dfts, s.window="periodic")
+fit = stl(df.bc, s.window="periodic")
 plot(fit)
 
 trend <- fit$time.series[,2]
 seasonal <- fit$time.series[,1]
 residual <- fit$time.series[,3]
 
-dfts.deseasonalized <- dfts - seasonal
+df.bc.deseasonalized <- df.bc - seasonal
 
-plot(dfts)
-plot(dfts.deseasonalized)
+plot(df.bc )
+plot(df.bc.deseasonalized)
+plot(seasonal)
 
 # we try to fit an ARMA process
-layout(matrix(c(1,1,2,3), 2, 2, byrow = TRUE))
-plot(armasubsets(y=dfts.deseasonalized,nar=7,nma=7))
+plot(armasubsets(y=df.bc.deseasonalized,nar=7,nma=7))
 
 # fit an ARMA and check the model
+m2.df <- Arima(df.bc.deseasonalized,order = c(3,0,0))
+summary(m2.df)
 
 # HP filter on the trend
 lambda <- 129600
@@ -314,7 +322,7 @@ plot(trend.hp)
 
 # Now try to fit an ARIMA taking the seasonality into account
 
-hist(diff(diff(dfts,lag=12)),main="Histogram",xlab="difference")
+hist(diff(diff(dfts,lag=12)), main="Histogram", xlab="difference")
 
 acf(as.vector(diff(dfts,lag=12))) # MA(1)
 pacf(as.vector(diff(dfts,lag=12))) # AR(1)
